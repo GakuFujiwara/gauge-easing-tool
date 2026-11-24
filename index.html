@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gauge Easing Tool</title>
+<style>
+:root{
+  --bg:#f5f4ef; --panel:#ffffff; --ink:#1c1b19; --muted:#6a685f; --line:#dedbd0; --grid:#ebe8df;
+  --track:#e7e4da; --accent:#e4570f; --accent-ink:#ffffff; --focus:#2563eb;
+  --code-bg:#1d1c1a; --code-ink:#ebe8df;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#151513; --panel:#1f1e1b; --ink:#ecebe5; --muted:#9a978c; --line:#37352f; --grid:#2b2a26;
+    --track:#2c2b27; --accent:#ff7a2e; --accent-ink:#1a0d03; --focus:#6ea0ff;
+    --code-bg:#121211; --code-ink:#ebe8df;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.5 system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif}
+main{max-width:1040px;margin:0 auto;padding:28px 16px 56px}
+header{margin-bottom:20px}
+h1{font-size:20px;margin:0 0 2px;letter-spacing:.01em}
+header p{margin:0;color:var(--muted);font-size:14px}
+h2{font-size:12px;margin:0 0 12px;color:var(--muted);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.grid{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+/* gauge */
+.gauge-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.readout{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.readout small{font-size:20px;margin-left:2px;color:var(--muted);font-weight:600}
+.time{color:var(--muted);font-variant-numeric:tabular-nums}
+.track{position:relative;height:40px;border-radius:12px;background:var(--track);overflow:hidden}
+.fill{position:absolute;top:0;bottom:0;left:0;width:0;background:var(--accent)}
+.tick{position:absolute;top:0;bottom:0;width:1px;background:rgba(128,128,128,.35)}
+.gauge-controls{display:flex;gap:14px;align-items:stretch;margin-top:16px;flex-wrap:wrap}
+.hold{flex:1 1 260px;min-height:68px;border:0;border-radius:12px;background:var(--ink);color:var(--bg);
+  font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  user-select:none;-webkit-user-select:none;touch-action:none;-webkit-touch-callout:none;
+  transition:transform .05s,background .1s}
+.hold b{font-size:18px;letter-spacing:.14em}
+.hold span{font-size:12px;opacity:.7}
+.hold.on{background:var(--accent);color:var(--accent-ink);transform:scale(.985)}
+.field{display:flex;flex-direction:column;justify-content:center;gap:4px;font-size:13px;color:var(--muted)}
+.field .inp{display:flex;align-items:center;gap:6px;color:var(--ink)}
+
+input[type=number],select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+  border-radius:8px;padding:6px 8px}
+input[type=number]{width:96px;font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* curve editor */
+#plot{display:block;width:100%;max-width:440px;margin:0 auto;height:auto;touch-action:none;
+  user-select:none;-webkit-user-select:none}
+#plot .bg{fill:var(--bg)}
+#plot .gl{stroke:var(--grid);stroke-width:1}
+#plot .diag{stroke:var(--line);stroke-dasharray:4 4;stroke-width:1.5}
+#plot .curve{fill:none;stroke:var(--ink);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+#plot #pts{pointer-events:none}
+#plot .arm{stroke:var(--accent);stroke-width:1.5;opacity:.35}
+#plot .arm.sel{opacity:.9}
+#plot .hd{fill:var(--panel);stroke:var(--accent);stroke-width:2.5}
+#plot .hd.sel{fill:var(--accent)}
+#plot .an{fill:var(--ink);stroke:var(--panel);stroke-width:2.5}
+#plot .an.lock{fill:var(--muted)}
+#plot .an.sel{fill:var(--accent)}
+#plot .play{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:3 3;pointer-events:none}
+#plot .dot{fill:var(--panel);stroke:var(--accent);stroke-width:3;pointer-events:none}
+#plot .tl{fill:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;pointer-events:none}
+.hint{font-size:12px;color:var(--muted);margin:8px 0 0}
+.tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;align-items:center}
+.btn{font:inherit;font-size:13px;padding:5px 12px;border-radius:8px;border:1px solid var(--line);
+  background:var(--bg);color:var(--ink);cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--muted)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.status{font-size:12px;color:var(--accent);min-height:1.5em;margin:6px 0 0}
+.agrid{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px 8px;align-items:center;margin-top:8px;
+  font-size:12px;color:var(--muted)}
+.agrid .ttl{grid-column:1 / -1;color:var(--ink);font-size:13px;font-weight:600}
+.agrid .col{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.agrid input{width:100%}
+.agrid input:disabled{opacity:.4}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;align-items:center}
+.presets .lbl{font-size:12px;color:var(--muted);margin-right:2px}
+.chip{font:inherit;font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);
+  background:var(--bg);color:var(--ink);cursor:pointer}
+.chip:hover{border-color:var(--muted)}
+.chip.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* output */
+.bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;padding:7px 12px;border:0;background:var(--bg);color:var(--muted);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.opt{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+#out{display:block;width:100%;min-height:360px;resize:vertical;
+  font:12.5px/1.55 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  background:var(--code-bg);color:var(--code-ink);border:0;border-radius:10px;padding:14px;
+  white-space:pre;overflow:auto;tab-size:4}
+.foot{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:10px}
+.foot .note{font-size:12px;color:var(--muted);margin:0}
+.copy{font:inherit;font-size:14px;font-weight:600;padding:8px 18px;border:0;border-radius:9px;
+  background:var(--accent);color:var(--accent-ink);cursor:pointer;white-space:nowrap}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Gauge Easing Tool</h1>
+    <p>ボタンを押している間だけゲージが進み、離すとリセット。アンカーを足して曲線を自由に作り、数値を書き出せます。</p>
+  </header>
+
+  <section class="card" aria-label="ゲージ">
+    <div class="gauge-head">
+      <div class="readout"><span id="pct">0.0</span><small>%</small></div>
+      <div class="time"><span id="elapsed">0.00</span> / <span id="total">2.00</span> 秒</div>
+    </div>
+    <div class="track" id="track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="fill" id="fill"></div>
+      <i class="tick" style="left:25%"></i><i class="tick" style="left:50%"></i><i class="tick" style="left:75%"></i>
+    </div>
+    <div class="gauge-controls">
+      <button class="hold" id="hold" type="button"><b>HOLD</b><span>押している間ゲージが進む（Space キーも可）</span></button>
+      <label class="field">100% までの秒数
+        <span class="inp"><input id="duration" type="number" min="0.05" max="600" step="0.1" inputmode="decimal"> 秒</span>
+      </label>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card" aria-label="イージング曲線">
+      <h2>イージング曲線</h2>
+      <svg id="plot" viewBox="0 0 360 346" role="img" aria-label="イージング曲線エディタ">
+        <rect class="bg" x="48" y="20" width="280" height="280"/>
+        <g id="grid"></g>
+        <line class="diag" x1="48" y1="300" x2="328" y2="20"/>
+        <path id="curve" class="curve"/>
+        <g id="pts"></g>
+        <line id="playX" class="play" visibility="hidden"/>
+        <circle id="dot" class="dot" r="5" visibility="hidden"/>
+        <text class="tl" x="48" y="11">ゲージ</text>
+        <text class="tl" x="328" y="341" text-anchor="end">経過時間 ÷ 秒数</text>
+      </svg>
+      <p class="hint">空いている所をダブルクリックでアンカー追加（カーブ上に作成）／アンカーをダブルクリックで削除。□ がアンカー、○ がハンドル。Shift で 0.05 刻み。</p>
+
+      <div class="tools">
+        <button class="btn primary" id="addBtn" type="button">＋ アンカー追加</button>
+        <button class="btn" id="delBtn" type="button">削除</button>
+        <button class="btn" id="undoBtn" type="button">元に戻す</button>
+        <button class="btn" id="redoBtn" type="button">やり直し</button>
+      </div>
+      <p class="status" id="status" role="status"></p>
+
+      <div class="agrid">
+        <div class="ttl" id="apTitle"></div>
+        <span></span><span class="col">x</span><span class="col">y</span>
+        <span>アンカー</span>
+        <input id="ax" type="number" min="0" max="1" step="0.01" inputmode="decimal">
+        <input id="ay" type="number" min="0" max="1" step="0.01" inputmode="decimal">
+        <span>手前ハンドル</span>
+        <input id="ix" type="number" min="0" max="1" step="0.01" inputmode="decimal">
+        <input id="iy" type="number" min="0" max="1" step="0.01" inputmode="decimal">
+        <span>先ハンドル</span>
+        <input id="ox" type="number" min="0" max="1" step="0.01" inputmode="decimal">
+        <input id="oy" type="number" min="0" max="1" step="0.01" inputmode="decimal">
+      </div>
+
+      <div class="presets" id="presets"><span class="lbl">プリセット（全体を置き換え）</span></div>
+    </section>
+
+    <section class="card" aria-label="出力">
+      <h2>出力</h2>
+      <div class="bar">
+        <div class="seg" role="group" aria-label="出力形式">
+          <button type="button" data-mode="bezier" aria-pressed="true">ベジェ制御点</button>
+          <button type="button" data-mode="lut" aria-pressed="false">サンプル表</button>
+        </div>
+        <label class="opt">言語<select id="lang"></select></label>
+        <label class="opt" id="samplesWrap">点数<select id="samples"></select></label>
+        <label class="opt">小数桁<select id="digits"></select></label>
+      </div>
+      <textarea id="out" readonly spellcheck="false" wrap="off" aria-label="出力コード"></textarea>
+      <div class="foot">
+        <p class="note" id="note"></p>
+        <button class="copy" id="copy" type="button">コピー</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ============ core: DOM に依存しない純粋なロジック ============ -->
+<script id="core">
+const LANGS = [
+  ['json', 'JSON'], ['js', 'JavaScript'], ['swift', 'Swift'], ['csharp', 'C# (Unity)'],
+  ['cpp', 'C++'], ['python', 'Python'], ['csv', 'CSV']
+];
+
+// cubic-bezier(x1, y1, x2, y2)
+const PRESETS = [
+  ['Linear',        [0.33, 0.33, 0.67, 0.67]],
+  ['CSS ease',      [0.25, 0.1, 0.25, 1]],
+  ['In Quad',       [0.11, 0, 0.5, 0]],
+  ['Out Quad',      [0.5, 1, 0.89, 1]],
+  ['InOut Quad',    [0.45, 0, 0.55, 1]],
+  ['In Cubic',      [0.32, 0, 0.67, 0]],
+  ['Out Cubic',     [0.33, 1, 0.68, 1]],
+  ['InOut Cubic',   [0.65, 0, 0.35, 1]],
+  ['In Expo',       [0.7, 0, 0.84, 0]],
+  ['Out Expo',      [0.16, 1, 0.3, 1]],
+  ['InOut Expo',    [0.87, 0, 0.13, 1]]
+];
+
+// ---------- 曲線モデル ----------
+// アンカー列 pts = [{ x, y, hi:[dx,dy], ho:[dx,dy] }, ...]（x 昇順）
+//   hi = 手前（左）ハンドル、ho = 先（右）ハンドル。どちらもアンカーからの相対オフセット。
+// 先頭は (0,0)、末尾は (1,1) に固定。隣り合うアンカー間が 3 次ベジェ 1 セグメント。
+// 各セグメントの x(t) は単調でなければならない（そうでないと y = f(x) の関数にならない）。
+//   ・先ハンドルは右、手前ハンドルは左へ伸ばす（ho.dx >= 0, hi.dx <= 0）
+//   ・手で動かすときハンドルの x は隣のアンカーまで（CSS の cubic-bezier と同じ）
+//   ・ハンドルが交差するカーブ（InOut Expo など）を分割すると、できた区間のハンドルが
+//     隣のアンカーの外へ出ることがある。x が単調なら有効なので、形を保つためそのまま許す
+// ハンドルの y は 0..1 に収めるので、曲線全体が 0..1 から出ない。
+const GAP = 0.01;        // アンカー間の最小 x 間隔
+const MAX_PTS = 32;
+const clampN = (v, a, b) => Math.min(Math.max(v, a), b);
+
+// 区間 [x0, x3] の制御点 x が c1, c2 のとき x(t) が単調か。
+// 導関数 ∝ u1(1-t)² + 2(u2-u1)(1-t)t + (1-u2)t²（u1, u2 は区間幅で正規化した c1, c2）が常に 0 以上、が条件。
+function segMonotone(x0, c1, c2, x3) {
+  const w = x3 - x0;
+  const u1 = (c1 - x0) / w, u2 = (c2 - x0) / w, eps = 1e-9;
+  if (u1 < -eps || u2 > 1 + eps) return false;
+  if (u1 <= u2) return true;
+  return (u1 - u2) * (u1 - u2) <= u1 * (1 - u2) + eps;
+}
+
+function ptsFromBezier(c) {
+  return [
+    { x: 0, y: 0, hi: [0, 0], ho: [c[0], c[1]] },
+    { x: 1, y: 1, hi: [c[2] - 1, c[3] - 1], ho: [0, 0] }
+  ];
+}
+
+const clonePts = pts => pts.map(p => ({ x: p.x, y: p.y, hi: p.hi.slice(), ho: p.ho.slice() }));
+
+function fixPts(pts) {
+  const n = pts.length;
+  pts[0].x = 0; pts[0].y = 0;
+  pts[n - 1].x = 1; pts[n - 1].y = 1;
+  for (let i = 1; i < n - 1; i++) {
+    pts[i].x = clampN(pts[i].x, pts[i - 1].x + GAP, 1 - (n - 1 - i) * GAP);
+    pts[i].y = clampN(pts[i].y, 0, 1);
+  }
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    if (i === 0) p.hi = [0, 0];
+    else {
+      p.hi[0] = clampN(p.hi[0], -p.x, 0);
+      p.hi[1] = clampN(p.y + p.hi[1], 0, 1) - p.y;
+    }
+    if (i === n - 1) p.ho = [0, 0];
+    else {
+      p.ho[0] = clampN(p.ho[0], 0, 1 - p.x);
+      p.ho[1] = clampN(p.y + p.ho[1], 0, 1) - p.y;
+    }
+  }
+  // x が単調でない区間は、両ハンドルの x を比率でアンカー側へ縮めて有効にする
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const ok = () => segMonotone(a.x, a.x + a.ho[0], b.x + b.hi[0], b.x);
+    if (ok()) continue;
+    const o0 = a.ho[0], i0 = b.hi[0];
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 30; k++) {
+      const m = (lo + hi) / 2;
+      a.ho[0] = o0 * m; b.hi[0] = i0 * m;
+      if (ok()) lo = m; else hi = m;
+    }
+    a.ho[0] = o0 * lo; b.hi[0] = i0 * lo;
+  }
+  return pts;
+}
+
+// 手で動かしたハンドルだけを縮めて、区間を有効（x 単調）に保つ。which: 'hi' | 'ho'
+function shrinkHandle(pts, i, which) {
+  const a = which === 'ho' ? pts[i] : pts[i - 1];
+  const b = which === 'ho' ? pts[i + 1] : pts[i];
+  const h = which === 'ho' ? a.ho : b.hi;
+  const ok = () => segMonotone(a.x, a.x + a.ho[0], b.x + b.hi[0], b.x);
+  if (ok()) return;
+  const v0 = h[0];
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 30; k++) {
+    const m = (lo + hi) / 2;
+    h[0] = v0 * m;
+    if (ok()) lo = m; else hi = m;
+  }
+  h[0] = v0 * lo;
+}
+
+// 保存データなどの検証。不正なら null
+function sanitizePts(raw) {
+  if (!Array.isArray(raw) || raw.length < 2 || raw.length > MAX_PTS) return null;
+  const ok = v => typeof v === 'number' && isFinite(v);
+  const pair = a => Array.isArray(a) && a.length === 2 && a.every(ok);
+  const pts = [];
+  for (const p of raw) {
+    if (!p || !ok(p.x) || !ok(p.y) || !pair(p.hi) || !pair(p.ho)) return null;
+    pts.push({ x: p.x, y: p.y, hi: p.hi.slice(), ho: p.ho.slice() });
+  }
+  return fixPts(pts);
+}
+
+// 1 つのフィールドを変更して制約を満たすよう補正。f: x y ix iy ox oy（ix.. はハンドルの絶対座標）
+function setField(pts, i, f, v) {
+  const p = pts[i], n = pts.length;
+  if (f === 'x' && i > 0 && i < n - 1) p.x = clampN(v, pts[i - 1].x + GAP, pts[i + 1].x - GAP);
+  else if (f === 'y' && i > 0 && i < n - 1) p.y = clampN(v, 0, 1);
+  else if (f === 'ix' && i > 0) { p.hi[0] = clampN(v, pts[i - 1].x, p.x) - p.x; shrinkHandle(pts, i, 'hi'); }
+  else if (f === 'iy' && i > 0) p.hi[1] = clampN(v, 0, 1) - p.y;
+  else if (f === 'ox' && i < n - 1) { p.ho[0] = clampN(v, p.x, pts[i + 1].x) - p.x; shrinkHandle(pts, i, 'ho'); }
+  else if (f === 'oy' && i < n - 1) p.ho[1] = clampN(v, 0, 1) - p.y;
+  fixPts(pts);
+}
+
+// 各セグメント [x0,y0, x1,y1, x2,y2, x3,y3]（P0..P3、絶対座標）
+function segmentsOf(pts) {
+  const s = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    s.push([a.x, a.y, a.x + a.ho[0], a.y + a.ho[1], b.x + b.hi[0], b.y + b.hi[1], b.x, b.y]);
+  }
+  return s;
+}
+
+function b1(t, p0, p1, p2, p3) {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+}
+
+// x(t) = x となる t を二分探索で求める
+function solveT(s, x, iters) {
+  let lo = 0, hi = 1, t = (x - s[0]) / (s[6] - s[0]);
+  for (let i = 0; i < (iters || 24); i++) {
+    if (b1(t, s[0], s[2], s[4], s[6]) < x) lo = t; else hi = t;
+    t = (lo + hi) / 2;
+  }
+  return t;
+}
+
+// x: 0..1 (経過時間 / 秒数) -> ゲージ値 0..1
+function curveEase(x, segs) {
+  if (x <= 0) return segs[0][1];
+  if (x >= 1) return segs[segs.length - 1][7];
+  let k = 0;
+  while (k < segs.length - 1 && x > segs[k][6]) k++;
+  const s = segs[k];
+  return b1(solveT(s, x), s[1], s[3], s[5], s[7]);
+}
+
+// x の位置で曲線を分割してアンカーを挿入（de Casteljau なので形は変わらない）。失敗なら -1、成功なら新アンカーの index
+function splitAt(pts, x) {
+  if (pts.length >= MAX_PTS) return -1;
+  let k = 0;
+  while (k < pts.length - 2 && x > pts[k + 1].x) k++;
+  const a = pts[k], b = pts[k + 1];
+  if (x - a.x < GAP - 1e-9 || b.x - x < GAP - 1e-9) return -1;
+  const s = segmentsOf([a, b])[0];
+  const t = solveT(s, x, 40);
+  const L = (p, q) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+  const P0 = [s[0], s[1]], P1 = [s[2], s[3]], P2 = [s[4], s[5]], P3 = [s[6], s[7]];
+  const Q0 = L(P0, P1), Q1 = L(P1, P2), Q2 = L(P2, P3);
+  const R0 = L(Q0, Q1), R1 = L(Q1, Q2), S = L(R0, R1);
+  const np = { x, y: S[1], hi: [R0[0] - S[0], R0[1] - S[1]], ho: [R1[0] - S[0], R1[1] - S[1]] };
+  a.ho = [Q0[0] - a.x, Q0[1] - a.y];
+  b.hi = [Q2[0] - b.x, Q2[1] - b.y];
+  pts.splice(k + 1, 0, np);
+  fixPts(pts);
+  return k + 1;
+}
+
+function removePoint(pts, i) {
+  if (i <= 0 || i >= pts.length - 1) return false;
+  pts.splice(i, 1);
+  fixPts(pts);
+  return true;
+}
+
+function sampleLut(segs, n) {
+  const a = [];
+  for (let i = 0; i < n; i++) a.push(curveEase(i / (n - 1), segs));
+  return a;
+}
+
+// ---------- 出力 ----------
+// 指定桁で丸め、末尾の 0 を落とす。dot=true なら整数にも ".0" を付ける（C 系/Swift/Python 用）
+function fmt(v, digits, dot) {
+  let s = parseFloat(v.toFixed(digits)).toString();
+  if (dot && !s.includes('.')) s += '.0';
+  return s;
+}
+
+function arrayBody(vals, indent, perLine) {
+  const rows = [];
+  for (let i = 0; i < vals.length; i += perLine) rows.push(indent + vals.slice(i, i + perLine).join(', '));
+  return rows.join(',\n');
+}
+
+const wrapRows = (rows, pre, post) => rows.map(r => pre + r + post).join(',\n');
+const lines = (...a) => a.flat().join('\n');
+const SEG_DOC = 'x0, y0, x1, y1, x2, y2, x3, y3';
+
+const GEN = {
+  json(x) {
+    if (x.mode === 'bezier') {
+      return lines('{', `  "duration": ${x.dur},`, '  "segments": [', wrapRows(x.segRows(), '    [', ']'), '  ]', '}');
+    }
+    return lines('{', `  "duration": ${x.dur},`, '  "samples": [', arrayBody(x.vals(), '    ', 8), '  ]', '}');
+  },
+
+  csv(x) {
+    if (x.mode === 'bezier') {
+      return lines('duration,segment,x0,y0,x1,y1,x2,y2,x3,y3',
+        x.segRows().map((r, i) => `${x.dur},${i},${r.replace(/, /g, ',')}`));
+    }
+    const rows = x.raw.map((v, i) => {
+      const r = i / (x.n - 1);
+      return `${fmt(r, 6)},${fmt(r * x.d, 4)},${x.num(v)}`;
+    });
+    return lines('ratio,seconds,value', rows);
+  },
+
+  js(x) {
+    if (x.mode === 'bezier') {
+      return lines(
+        `// ${x.head}`,
+        `const GAUGE_DURATION = ${x.dur};`,
+        `// Cubic bezier segments [${SEG_DOC}] = P0..P3 (x: time ratio 0..1, y: gauge 0..1)`,
+        'const GAUGE_SEGMENTS = [',
+        wrapRows(x.segRows(), '  [', ']'),
+        '];',
+        '',
+        'const bez = (t, p0, p1, p2, p3) => {',
+        '  const u = 1 - t;',
+        '  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;',
+        '};',
+        '',
+        '// x: 0..1 (elapsed / GAUGE_DURATION) -> 0..1 (gauge)',
+        'function gaugeEase(x) {',
+        '  const s = GAUGE_SEGMENTS;',
+        '  if (x <= 0) return s[0][1];',
+        '  if (x >= 1) return s[s.length - 1][7];',
+        '  let k = 0;',
+        '  while (k < s.length - 1 && x > s[k][6]) k++;',
+        '  const [x0, y0, x1, y1, x2, y2, x3, y3] = s[k];',
+        '  let lo = 0, hi = 1, t = (x - x0) / (x3 - x0);',
+        '  for (let i = 0; i < 24; i++) {',
+        '    if (bez(t, x0, x1, x2, x3) < x) lo = t; else hi = t;',
+        '    t = (lo + hi) / 2;',
+        '  }',
+        '  return bez(t, y0, y1, y2, y3);',
+        '}',
+        '',
+        '// usage: gauge = gaugeEase(Math.min(heldSeconds / GAUGE_DURATION, 1));'
+      );
+    }
+    return lines(
+      `// ${x.head}`,
+      `const GAUGE_DURATION = ${x.dur};`,
+      'const GAUGE_LUT = [',
+      arrayBody(x.vals(), '  ', 8),
+      '];',
+      '',
+      '// x: 0..1 (elapsed / GAUGE_DURATION) -> 0..1 (gauge), linear interpolation',
+      'function gaugeEase(x) {',
+      '  const n = GAUGE_LUT.length;',
+      '  const f = Math.min(Math.max(x, 0), 1) * (n - 1);',
+      '  const i = Math.min(Math.floor(f), n - 2);',
+      '  return GAUGE_LUT[i] + (GAUGE_LUT[i + 1] - GAUGE_LUT[i]) * (f - i);',
+      '}',
+      '',
+      '// usage: gauge = gaugeEase(heldSeconds / GAUGE_DURATION);'
+    );
+  },
+
+  swift(x) {
+    if (x.mode === 'bezier') {
+      return lines(
+        `// ${x.head}`,
+        'enum GaugeEase {',
+        `    static let duration: Double = ${x.durDot}`,
+        `    /// Cubic bezier segments [${SEG_DOC}] = P0..P3 (x: time ratio 0...1, y: gauge 0...1)`,
+        '    static let segments: [[Double]] = [',
+        wrapRows(x.segRows(true), '        [', ']'),
+        '    ]',
+        '',
+        '    /// x: 0...1 (elapsed / duration) -> 0...1 (gauge)',
+        '    static func evaluate(_ x: Double) -> Double {',
+        '        if x <= 0 { return segments[0][1] }',
+        '        if x >= 1 { return segments[segments.count - 1][7] }',
+        '        var k = 0',
+        '        while k < segments.count - 1 && x > segments[k][6] { k += 1 }',
+        '        let s = segments[k]',
+        '        var lo = 0.0, hi = 1.0, t = (x - s[0]) / (s[6] - s[0])',
+        '        for _ in 0..<24 {',
+        '            if bezier(t, s[0], s[2], s[4], s[6]) < x { lo = t } else { hi = t }',
+        '            t = (lo + hi) * 0.5',
+        '        }',
+        '        return bezier(t, s[1], s[3], s[5], s[7])',
+        '    }',
+        '',
+        '    private static func bezier(_ t: Double, _ p0: Double, _ p1: Double, _ p2: Double, _ p3: Double) -> Double {',
+        '        let u = 1 - t',
+        '        return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3',
+        '    }',
+        '}',
+        '',
+        '// usage: gauge = GaugeEase.evaluate(min(heldSeconds / GaugeEase.duration, 1))'
+      );
+    }
+    return lines(
+      `// ${x.head}`,
+      'enum GaugeEase {',
+      `    static let duration: Double = ${x.durDot}`,
+      '    static let lut: [Double] = [',
+      arrayBody(x.vals(true), '        ', 8),
+      '    ]',
+      '',
+      '    /// x: 0...1 (elapsed / duration) -> 0...1 (gauge), linear interpolation',
+      '    static func evaluate(_ x: Double) -> Double {',
+      '        let n = lut.count',
+      '        let f = min(max(x, 0), 1) * Double(n - 1)',
+      '        let i = min(Int(f), n - 2)',
+      '        return lut[i] + (lut[i + 1] - lut[i]) * (f - Double(i))',
+      '    }',
+      '}',
+      '',
+      '// usage: gauge = GaugeEase.evaluate(heldSeconds / GaugeEase.duration)'
+    );
+  },
+
+  csharp(x) {
+    if (x.mode === 'bezier') {
+      return lines(
+        `// ${x.head}`,
+        'public static class GaugeEase',
+        '{',
+        `    public const float Duration = ${x.durF};`,
+        `    // Cubic bezier segments [${SEG_DOC}] = P0..P3 (x: time ratio 0..1, y: gauge 0..1)`,
+        '    static readonly float[][] Segments =',
+        '    {',
+        wrapRows(x.segRows(true, 'f'), '        new float[] { ', ' }'),
+        '    };',
+        '',
+        '    // x: 0..1 (elapsed / Duration) -> 0..1 (gauge)',
+        '    public static float Evaluate(float x)',
+        '    {',
+        '        if (x <= 0f) return Segments[0][1];',
+        '        if (x >= 1f) return Segments[Segments.Length - 1][7];',
+        '        int k = 0;',
+        '        while (k < Segments.Length - 1 && x > Segments[k][6]) k++;',
+        '        float[] s = Segments[k];',
+        '        float lo = 0f, hi = 1f, t = (x - s[0]) / (s[6] - s[0]);',
+        '        for (int i = 0; i < 24; i++)',
+        '        {',
+        '            if (Bezier(t, s[0], s[2], s[4], s[6]) < x) lo = t; else hi = t;',
+        '            t = (lo + hi) * 0.5f;',
+        '        }',
+        '        return Bezier(t, s[1], s[3], s[5], s[7]);',
+        '    }',
+        '',
+        '    static float Bezier(float t, float p0, float p1, float p2, float p3)',
+        '    {',
+        '        float u = 1f - t;',
+        '        return u * u * u * p0 + 3f * u * u * t * p1 + 3f * u * t * t * p2 + t * t * t * p3;',
+        '    }',
+        '}',
+        '',
+        '// usage: gauge = GaugeEase.Evaluate(Mathf.Min(heldSeconds / GaugeEase.Duration, 1f));'
+      );
+    }
+    return lines(
+      `// ${x.head}`,
+      'public static class GaugeEase',
+      '{',
+      `    public const float Duration = ${x.durF};`,
+      '    static readonly float[] Lut =',
+      '    {',
+      arrayBody(x.vals(true, 'f'), '        ', 8),
+      '    };',
+      '',
+      '    // x: 0..1 (elapsed / Duration) -> 0..1 (gauge), linear interpolation',
+      '    public static float Evaluate(float x)',
+      '    {',
+      '        int n = Lut.Length;',
+      '        float f = (x < 0f ? 0f : (x > 1f ? 1f : x)) * (n - 1);',
+      '        int i = (int)f;',
+      '        if (i > n - 2) i = n - 2;',
+      '        return Lut[i] + (Lut[i + 1] - Lut[i]) * (f - i);',
+      '    }',
+      '}',
+      '',
+      '// usage: gauge = GaugeEase.Evaluate(heldSeconds / GaugeEase.Duration);'
+    );
+  },
+
+  cpp(x) {
+    if (x.mode === 'bezier') {
+      return lines(
+        `// ${x.head}`,
+        'namespace gauge_ease {',
+        '',
+        `constexpr float kDuration = ${x.durF};`,
+        `constexpr int kSegmentCount = ${x.segs.length};`,
+        `// Cubic bezier segments [${SEG_DOC}] = P0..P3 (x: time ratio 0..1, y: gauge 0..1)`,
+        'constexpr float kSegments[kSegmentCount][8] = {',
+        wrapRows(x.segRows(true, 'f'), '    {', '}'),
+        '};',
+        '',
+        'inline float bezier(float t, float p0, float p1, float p2, float p3) {',
+        '    const float u = 1.0f - t;',
+        '    return u * u * u * p0 + 3.0f * u * u * t * p1 + 3.0f * u * t * t * p2 + t * t * t * p3;',
+        '}',
+        '',
+        '// x: 0..1 (elapsed / kDuration) -> 0..1 (gauge)',
+        'inline float evaluate(float x) {',
+        '    if (x <= 0.0f) return kSegments[0][1];',
+        '    if (x >= 1.0f) return kSegments[kSegmentCount - 1][7];',
+        '    int k = 0;',
+        '    while (k < kSegmentCount - 1 && x > kSegments[k][6]) ++k;',
+        '    const float* s = kSegments[k];',
+        '    float lo = 0.0f, hi = 1.0f, t = (x - s[0]) / (s[6] - s[0]);',
+        '    for (int i = 0; i < 24; ++i) {',
+        '        if (bezier(t, s[0], s[2], s[4], s[6]) < x) lo = t; else hi = t;',
+        '        t = (lo + hi) * 0.5f;',
+        '    }',
+        '    return bezier(t, s[1], s[3], s[5], s[7]);',
+        '}',
+        '',
+        '}  // namespace gauge_ease',
+        '',
+        '// usage: gauge = gauge_ease::evaluate(std::min(heldSeconds / gauge_ease::kDuration, 1.0f));'
+      );
+    }
+    return lines(
+      `// ${x.head}`,
+      'namespace gauge_ease {',
+      '',
+      `constexpr float kDuration = ${x.durF};`,
+      `constexpr int kLutSize = ${x.n};`,
+      'constexpr float kLut[kLutSize] = {',
+      arrayBody(x.vals(true, 'f'), '    ', 8),
+      '};',
+      '',
+      '// x: 0..1 (elapsed / kDuration) -> 0..1 (gauge), linear interpolation',
+      'inline float evaluate(float x) {',
+      '    x = x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x);',
+      '    const float f = x * (kLutSize - 1);',
+      '    int i = static_cast<int>(f);',
+      '    if (i > kLutSize - 2) i = kLutSize - 2;',
+      '    return kLut[i] + (kLut[i + 1] - kLut[i]) * (f - static_cast<float>(i));',
+      '}',
+      '',
+      '}  // namespace gauge_ease',
+      '',
+      '// usage: gauge = gauge_ease::evaluate(heldSeconds / gauge_ease::kDuration);'
+    );
+  },
+
+  python(x) {
+    if (x.mode === 'bezier') {
+      return lines(
+        `# ${x.head}`,
+        `GAUGE_DURATION = ${x.durDot}`,
+        `# Cubic bezier segments (${SEG_DOC}) = P0..P3 (x: time ratio 0..1, y: gauge 0..1)`,
+        'GAUGE_SEGMENTS = [',
+        wrapRows(x.segRows(true), '    (', ')'),
+        ']',
+        '',
+        '',
+        'def _bez(t, p0, p1, p2, p3):',
+        '    u = 1.0 - t',
+        '    return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3',
+        '',
+        '',
+        'def gauge_ease(x):',
+        '    """x: 0..1 (elapsed / GAUGE_DURATION) -> 0..1 (gauge)"""',
+        '    s = GAUGE_SEGMENTS',
+        '    if x <= 0.0:',
+        '        return s[0][1]',
+        '    if x >= 1.0:',
+        '        return s[-1][7]',
+        '    k = 0',
+        '    while k < len(s) - 1 and x > s[k][6]:',
+        '        k += 1',
+        '    x0, y0, x1, y1, x2, y2, x3, y3 = s[k]',
+        '    lo, hi, t = 0.0, 1.0, (x - x0) / (x3 - x0)',
+        '    for _ in range(24):',
+        '        if _bez(t, x0, x1, x2, x3) < x:',
+        '            lo = t',
+        '        else:',
+        '            hi = t',
+        '        t = (lo + hi) * 0.5',
+        '    return _bez(t, y0, y1, y2, y3)',
+        '',
+        '',
+        '# usage: gauge = gauge_ease(min(held_seconds / GAUGE_DURATION, 1.0))'
+      );
+    }
+    return lines(
+      `# ${x.head}`,
+      `GAUGE_DURATION = ${x.durDot}`,
+      'GAUGE_LUT = [',
+      arrayBody(x.vals(true), '    ', 8),
+      ']',
+      '',
+      '',
+      'def gauge_ease(x):',
+      '    """x: 0..1 (elapsed / GAUGE_DURATION) -> 0..1 (gauge), linear interpolation"""',
+      '    n = len(GAUGE_LUT)',
+      '    f = min(max(x, 0.0), 1.0) * (n - 1)',
+      '    i = min(int(f), n - 2)',
+      '    return GAUGE_LUT[i] + (GAUGE_LUT[i + 1] - GAUGE_LUT[i]) * (f - i)',
+      '',
+      '',
+      '# usage: gauge = gauge_ease(held_seconds / GAUGE_DURATION)'
+    );
+  }
+};
+
+// o: { duration, pts, mode:'bezier'|'lut', lang, samples, digits }
+function buildOutput(o) {
+  const { duration: d, pts, mode, lang, samples: n, digits: g } = o;
+  const segs = segmentsOf(pts);
+  const num = (v, dot, suf) => fmt(v, g, dot) + (suf || '');
+  const dur = fmt(d, 3);
+  // 区間が 1 つなら CSS の cubic-bezier と同じ（端点が (0,0)-(1,1) 固定のため）
+  const css = segs.length === 1
+    ? ', cubic-bezier(' + [segs[0][2], segs[0][3], segs[0][4], segs[0][5]].map(v => fmt(v, g)).join(', ') + ')'
+    : '';
+  const raw = mode === 'lut' ? sampleLut(segs, n) : null;
+  const x = {
+    mode, d, n, raw, segs, dur, num,
+    head: mode === 'lut'
+      ? `Gauge easing: ${dur}s to reach 100%, ${n}-point lookup table (t = i / ${n - 1})${css}`
+      : `Gauge easing: ${dur}s to reach 100%, ${segs.length} bezier segment${segs.length > 1 ? 's' : ''}${css}`,
+    durDot: fmt(d, 3, true),
+    durF: fmt(d, 3, true) + 'f',
+    segRows: (dot, suf) => segs.map(s => s.map(v => num(v, dot, suf)).join(', ')),
+    vals: (dot, suf) => raw.map(v => num(v, dot, suf))
+  };
+  return GEN[lang](x);
+}
+</script>
+
+<!-- ============ UI ============ -->
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const KEY = 'gauge-easing-tool:v1';
+  const SAMPLE_CHOICES = [16, 32, 64, 128, 256];
+  const DEFAULT_C = [0.42, 0, 0.58, 1];
+  const DEFAULTS = { duration: 2, mode: 'bezier', lang: 'json', samples: 32, digits: 4 };
+  const clamp = clampN;
+  const isNum = v => typeof v === 'number' && isFinite(v);
+
+  function sanitize(s) {
+    s = s && typeof s === 'object' ? s : {};
+    let pts = sanitizePts(s.pts);
+    // 旧形式（単一ベジェ c）からの移行
+    if (!pts && Array.isArray(s.c) && s.c.length === 4 && s.c.every(isNum)) pts = ptsFromBezier(s.c.map(v => clamp(v, 0, 1)));
+    return {
+      duration: isNum(s.duration) ? clamp(s.duration, 0.05, 600) : DEFAULTS.duration,
+      pts: fixPts(pts || ptsFromBezier(DEFAULT_C)),
+      mode: s.mode === 'lut' ? 'lut' : 'bezier',
+      lang: LANGS.some(l => l[0] === s.lang) ? s.lang : DEFAULTS.lang,
+      samples: SAMPLE_CHOICES.includes(s.samples) ? s.samples : DEFAULTS.samples,
+      digits: isNum(s.digits) && s.digits >= 2 && s.digits <= 6 ? Math.round(s.digits) : DEFAULTS.digits
+    };
+  }
+  let S;
+  try { S = sanitize(JSON.parse(localStorage.getItem(KEY))); } catch (e) { S = sanitize(null); }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+  let sel = 0;            // 選択中アンカー（-1 = なし）
+  let segs = segmentsOf(S.pts);
+  const hist = [], future = [];
+
+  // ---------- 履歴 ----------
+  function pushHist(before) {
+    hist.push(before);
+    if (hist.length > 100) hist.shift();
+    future.length = 0;
+  }
+  // fn が false / -1 を返したら変更なし扱い
+  function commit(fn) {
+    const before = clonePts(S.pts);
+    const r = fn(S.pts);
+    if (r === false || r === -1) return r;
+    pushHist(before);
+    return r;
+  }
+  function undo() {
+    if (!hist.length) return;
+    future.push(clonePts(S.pts));
+    S.pts = hist.pop();
+    sel = Math.min(sel, S.pts.length - 1);
+    render(); save();
+  }
+  function redo() {
+    if (!future.length) return;
+    hist.push(clonePts(S.pts));
+    S.pts = future.pop();
+    sel = Math.min(sel, S.pts.length - 1);
+    render(); save();
+  }
+
+  // ---------- plot geometry ----------
+  const X0 = 48, W = 280, Y0 = 300;
+  const px = x => X0 + W * x;
+  const py = y => Y0 - W * y;
+  const plot = $('plot'), curve = $('curve'), ptsG = $('pts');
+  const playX = $('playX'), dot = $('dot');
+
+  (function buildGrid() {
+    let g = '';
+    for (const v of [0, 0.25, 0.5, 0.75, 1]) {
+      g += `<line class="gl" x1="${px(v)}" y1="${py(0)}" x2="${px(v)}" y2="${py(1)}"/>`;
+      g += `<line class="gl" x1="${px(0)}" y1="${py(v)}" x2="${px(1)}" y2="${py(v)}"/>`;
+    }
+    for (const v of [0, 0.5, 1]) {
+      g += `<text class="tl" x="${px(v)}" y="318" text-anchor="middle">${v}</text>`;
+      g += `<text class="tl" x="40" y="${py(v) + 3.5}" text-anchor="end">${v}</text>`;
+    }
+    $('grid').innerHTML = g;
+  })();
+
+  const setLine = (el, x1, y1, x2, y2) => {
+    el.setAttribute('x1', x1); el.setAttribute('y1', y1); el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+  };
+
+  // ---------- controls setup ----------
+  const hold = $('hold'), track = $('track'), fill = $('fill');
+  const pctEl = $('pct'), elapsedEl = $('elapsed'), totalEl = $('total');
+  const durInput = $('duration'), out = $('out'), statusEl = $('status');
+
+  const chips = PRESETS.map(([name, c]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = name;
+    b.addEventListener('click', e => {
+      commit(pts => { S.pts = ptsFromBezier(c); return true; });
+      sel = 0;
+      render(); save();
+      if (e.detail) b.blur();
+    });
+    $('presets').appendChild(b);
+    return { b, c };
+  });
+
+  const langSel = $('lang'), samplesSel = $('samples'), digitsSel = $('digits');
+  langSel.innerHTML = LANGS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  samplesSel.innerHTML = SAMPLE_CHOICES.map(v => `<option value="${v}">${v}</option>`).join('');
+  digitsSel.innerHTML = [2, 3, 4, 5, 6].map(v => `<option value="${v}">${v}</option>`).join('');
+  durInput.value = S.duration;
+
+  langSel.addEventListener('change', () => { S.lang = langSel.value; renderOut(); save(); });
+  samplesSel.addEventListener('change', () => { S.samples = +samplesSel.value; renderOut(); save(); });
+  digitsSel.addEventListener('change', () => { S.digits = +digitsSel.value; renderOut(); save(); });
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+    S.mode = b.dataset.mode; renderOut(); save();
+  }));
+
+  durInput.addEventListener('input', () => {
+    const v = parseFloat(durInput.value);
+    if (!isNum(v) || v <= 0) return;
+    S.duration = clamp(v, 0.05, 600);
+    render(); save();
+  });
+  durInput.addEventListener('change', () => { durInput.value = S.duration; });
+
+  $('copy').addEventListener('click', async () => {
+    const btn = $('copy');
+    try { await navigator.clipboard.writeText(out.value); }
+    catch (e) { out.focus(); out.select(); try { document.execCommand('copy'); } catch (e2) {} }
+    btn.textContent = 'コピーしました';
+    setTimeout(() => { btn.textContent = 'コピー'; }, 1400);
+  });
+
+  let statusTimer = 0;
+  function flash(msg) {
+    statusEl.textContent = msg;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => { statusEl.textContent = ''; }, 2200);
+  }
+
+  // ---------- anchor operations ----------
+  function addAt(x) {
+    x = Math.round(clamp(x, 0, 1) * 100) / 100;
+    const idx = commit(pts => splitAt(pts, x));
+    if (idx === -1) { flash('そこには追加できません（既存のアンカーに近すぎる、または上限）'); return; }
+    sel = idx;
+    render(); save();
+  }
+  function removeAt(i) {
+    if (!commit(pts => removePoint(pts, i))) return false;
+    sel = Math.min(Math.max(i - 1, 0), S.pts.length - 1);
+    render(); save();
+    return true;
+  }
+  function addByButton() {
+    const n = S.pts.length;
+    let k;
+    if (sel >= 0 && sel < n - 1) k = sel;            // 選択アンカーの右側の区間
+    else if (sel === n - 1) k = n - 2;               // 末尾なら左側の区間
+    else {                                           // 未選択なら一番広い区間
+      k = 0;
+      for (let i = 1; i < n - 1; i++) if (S.pts[i + 1].x - S.pts[i].x > S.pts[k + 1].x - S.pts[k].x) k = i;
+    }
+    addAt((S.pts[k].x + S.pts[k + 1].x) / 2);
+  }
+  $('addBtn').addEventListener('click', addByButton);
+  $('delBtn').addEventListener('click', () => { if (sel >= 0) removeAt(sel); });
+  $('undoBtn').addEventListener('click', undo);
+  $('redoBtn').addEventListener('click', redo);
+
+  // ---------- numeric fields for selected anchor ----------
+  const FIELD_IDS = ['ax', 'ay', 'ix', 'iy', 'ox', 'oy'];
+  const FIELD_KEY = { ax: 'x', ay: 'y', ix: 'ix', iy: 'iy', ox: 'ox', oy: 'oy' };
+  const fieldValue = id => {
+    const p = S.pts[sel];
+    if (!p) return '';
+    const v = { ax: p.x, ay: p.y, ix: p.x + p.hi[0], iy: p.y + p.hi[1], ox: p.x + p.ho[0], oy: p.y + p.ho[1] }[id];
+    return +v.toFixed(4);
+  };
+  const pushedFor = new Set();
+  FIELD_IDS.forEach(id => {
+    const el = $(id);
+    el.addEventListener('input', () => {
+      const v = parseFloat(el.value);
+      if (!isNum(v) || sel < 0) return;
+      if (!pushedFor.has(id)) { pushHist(clonePts(S.pts)); pushedFor.add(id); }
+      setField(S.pts, sel, FIELD_KEY[id], v);
+      render(); save();
+    });
+    el.addEventListener('change', () => { pushedFor.delete(id); el.value = fieldValue(id); });
+    el.addEventListener('blur', () => pushedFor.delete(id));
+  });
+
+  // ---------- gauge (hold) ----------
+  let held = false, elapsed = 0, last = 0, raf = 0;
+
+  function drawGauge() {
+    const x = clamp(elapsed / S.duration, 0, 1);
+    const y = curveEase(x, segs);
+    fill.style.width = (y * 100) + '%';
+    pctEl.textContent = (y * 100).toFixed(1);
+    elapsedEl.textContent = elapsed.toFixed(2);
+    track.setAttribute('aria-valuenow', Math.round(y * 100));
+    const show = held || elapsed > 0;
+    dot.setAttribute('visibility', show ? 'visible' : 'hidden');
+    playX.setAttribute('visibility', show ? 'visible' : 'hidden');
+    if (show) {
+      dot.setAttribute('cx', px(x)); dot.setAttribute('cy', py(y));
+      setLine(playX, px(x), py(0), px(x), py(1));
+    }
+  }
+
+  function tick() {
+    if (!held) return;
+    const now = performance.now();
+    elapsed = Math.min(elapsed + (now - last) / 1000, S.duration);
+    last = now;
+    drawGauge();
+    raf = requestAnimationFrame(tick);
+  }
+  function press() {
+    if (held) return;
+    held = true; elapsed = 0; last = performance.now();
+    hold.classList.add('on');
+    raf = requestAnimationFrame(tick);
+  }
+  function release() {
+    if (!held && elapsed === 0) return;
+    held = false; cancelAnimationFrame(raf); elapsed = 0;
+    hold.classList.remove('on');
+    drawGauge();
+  }
+
+  hold.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    try { hold.setPointerCapture(e.pointerId); } catch (err) {}
+    e.preventDefault();
+    press();
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => hold.addEventListener(t, release));
+  hold.addEventListener('contextmenu', e => e.preventDefault());
+
+  const isField = el => el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA');
+  document.addEventListener('keydown', e => {
+    if (isField(e.target)) return;
+    if (e.code === 'Space') {
+      if (e.target.tagName === 'BUTTON' && e.target !== hold) return;   // ボタンの Space はそのボタンの操作
+      e.preventDefault();
+      if (!e.repeat) press();
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && sel > 0 && sel < S.pts.length - 1) {
+      e.preventDefault();
+      removeAt(sel);
+    } else if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ') {
+      e.preventDefault();
+      if (e.shiftKey) redo(); else undo();
+    } else if (e.ctrlKey && e.code === 'KeyY') {
+      e.preventDefault();
+      redo();
+    }
+  });
+  document.addEventListener('keyup', e => { if (e.code === 'Space') release(); });
+  window.addEventListener('blur', release);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
+
+  // ---------- plot interaction ----------
+  const toSvg = e => {
+    const pt = plot.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    return pt.matrixTransform(plot.getScreenCTM().inverse());
+  };
+
+  const centerOf = h => {
+    const p = S.pts[h.i];
+    if (h.kind === 'hi') return [p.x + p.hi[0], p.y + p.hi[1]];
+    if (h.kind === 'ho') return [p.x + p.ho[0], p.y + p.ho[1]];
+    return [p.x, p.y];
+  };
+
+  // ポインタに一番近いアンカー/ハンドル（半径 14 以内）。距離がほぼ同じなら
+  // 「選択中アンカーのハンドル > アンカー > 他のハンドル」の順で優先
+  function pick(e) {
+    const p = toSvg(e), R = 14, n = S.pts.length;
+    let best = null;
+    const consider = (kind, i, x, y, pri) => {
+      const d = Math.hypot(p.x - px(x), p.y - py(y));
+      if (d > R) return;
+      if (!best || d < best.d - 0.75 || (d <= best.d + 0.75 && pri < best.pri)) best = { kind, i, d, pri };
+    };
+    S.pts.forEach((pt, i) => {
+      consider('anchor', i, pt.x, pt.y, 1);
+      if (i > 0) consider('hi', i, pt.x + pt.hi[0], pt.y + pt.hi[1], i === sel ? 0 : 2);
+      if (i < n - 1) consider('ho', i, pt.x + pt.ho[0], pt.y + pt.ho[1], i === sel ? 0 : 2);
+    });
+    return best;
+  }
+  const sameHit = (a, b) => (!a && !b) || (a && b && a.kind === b.kind && a.i === b.i);
+
+  let drag = null, lastDown = null;
+
+  plot.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (drag) return;
+    e.preventDefault();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    const p = toSvg(e), hit = pick(e), now = performance.now();
+
+    // ダブルクリック / ダブルタップ（ドラッグしていない 2 連続の押下）
+    if (lastDown && !lastDown.moved && now - lastDown.t < 350 && sameHit(lastDown.hit, hit) &&
+        Math.hypot(p.x - lastDown.x, p.y - lastDown.y) < 8) {
+      lastDown = null;
+      if (hit && hit.kind === 'anchor') removeAt(hit.i);
+      else if (!hit && p.x > X0 - 6 && p.x < X0 + W + 6 && p.y > 14 && p.y < Y0 + 6) addAt((p.x - X0) / W);
+      return;
+    }
+    lastDown = { t: now, hit, x: p.x, y: p.y, moved: false };
+
+    if (!hit) { sel = -1; render(); return; }
+    sel = hit.i;
+    const c = centerOf(hit);
+    drag = {
+      kind: hit.kind, i: hit.i, moved: false, sx: p.x, sy: p.y,
+      gx: p.x - px(c[0]), gy: p.y - py(c[1]),       // つかんだ位置のずれ
+      before: clonePts(S.pts)
+    };
+    try { plot.setPointerCapture(e.pointerId); } catch (err) {}
+    render();
+  });
+
+  plot.addEventListener('pointermove', e => {
+    if (!drag) {
+      const h = pick(e);
+      plot.style.cursor = h ? 'grab' : 'default';
+      return;
+    }
+    const p = toSvg(e);
+    if (!drag.moved) {
+      if (Math.hypot(p.x - drag.sx, p.y - drag.sy) < 3) return;
+      drag.moved = true;
+      pushHist(drag.before);
+      if (lastDown) lastDown.moved = true;
+      plot.style.cursor = 'grabbing';
+    }
+    const step = e.shiftKey ? 0.05 : 0.01;
+    const snap = v => +(Math.round(clamp(v, 0, 1) / step) * step).toFixed(3);
+    const vx = snap((p.x - drag.gx - X0) / W);
+    const vy = snap((Y0 - (p.y - drag.gy)) / W);
+    const i = drag.i, n = S.pts.length;
+    if (drag.kind === 'anchor') {
+      if (i > 0 && i < n - 1) { setField(S.pts, i, 'x', vx); setField(S.pts, i, 'y', vy); }
+    } else if (drag.kind === 'hi') {
+      setField(S.pts, i, 'ix', vx); setField(S.pts, i, 'iy', vy);
+    } else {
+      setField(S.pts, i, 'ox', vx); setField(S.pts, i, 'oy', vy);
+    }
+    render(); save();
+  });
+
+  const endDrag = () => { drag = null; plot.style.cursor = 'default'; };
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => plot.addEventListener(t, endDrag));
+
+  // ---------- render ----------
+  function renderPts() {
+    const n = S.pts.length;
+    let arms = '', hds = '', ans = '';
+    S.pts.forEach((p, i) => {
+      const s = i === sel ? ' sel' : '';
+      const handle = (dx, dy) => {
+        const hx = px(p.x + dx), hy = py(p.y + dy);
+        arms += `<line class="arm${s}" x1="${px(p.x)}" y1="${py(p.y)}" x2="${hx}" y2="${hy}"/>`;
+        hds += `<circle class="hd${s}" cx="${hx}" cy="${hy}" r="5.5"/>`;
+      };
+      if (i > 0) handle(p.hi[0], p.hi[1]);
+      if (i < n - 1) handle(p.ho[0], p.ho[1]);
+      const lock = i === 0 || i === n - 1 ? ' lock' : '';
+      ans += `<rect class="an${lock}${s}" x="${px(p.x) - 6.5}" y="${py(p.y) - 6.5}" width="13" height="13" rx="2.5"/>`;
+    });
+    ptsG.innerHTML = arms + hds + ans;
+  }
+
+  function renderPanel() {
+    const n = S.pts.length, p = S.pts[sel], has = !!p;
+    $('apTitle').textContent = has ? `アンカー ${sel + 1} / ${n}` + (sel === 0 ? '（始点・固定）' : sel === n - 1 ? '（終点・固定）' : '')
+                                  : `アンカー未選択（全 ${n} 点）`;
+    const off = {
+      ax: !has || sel === 0 || sel === n - 1, ay: !has || sel === 0 || sel === n - 1,
+      ix: !has || sel === 0, iy: !has || sel === 0,
+      ox: !has || sel === n - 1, oy: !has || sel === n - 1
+    };
+    FIELD_IDS.forEach(id => {
+      const el = $(id);
+      el.disabled = off[id];
+      if (document.activeElement !== el) el.value = off[id] ? '' : fieldValue(id);
+    });
+    $('delBtn').disabled = !(sel > 0 && sel < n - 1);
+    $('addBtn').disabled = n >= MAX_PTS;
+    $('undoBtn').disabled = !hist.length;
+    $('redoBtn').disabled = !future.length;
+  }
+
+  function renderOut() {
+    out.value = buildOutput(S);
+    document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === S.mode)));
+    $('samplesWrap').hidden = S.mode !== 'lut';
+    langSel.value = S.lang; samplesSel.value = S.samples; digitsSel.value = S.digits;
+    const data = S.lang === 'csv' || S.lang === 'json';
+    $('note').textContent = S.mode === 'bezier'
+      ? (data ? 'セグメントごとに 3 次ベジェの [x0,y0, x1,y1, x2,y2, x3,y3]（x=時間比, y=ゲージ, どちらも 0〜1）。'
+              : 'x = 経過時間 ÷ 秒数（0〜1）を渡すとゲージ値（0〜1）が返ります。')
+      : (data ? '等間隔の時間サンプル（t = i / (点数 − 1)）。値は 0〜1。'
+              : '等間隔サンプルを線形補間して引く方式。毎フレームの計算が軽い。');
+  }
+
+  function render() {
+    segs = segmentsOf(S.pts);
+    let d = `M${px(segs[0][0])},${py(segs[0][1])}`;
+    for (const s of segs) d += ` C${px(s[2])},${py(s[3])} ${px(s[4])},${py(s[5])} ${px(s[6])},${py(s[7])}`;
+    curve.setAttribute('d', d);
+    renderPts();
+    renderPanel();
+    if (document.activeElement !== durInput) durInput.value = S.duration;
+    totalEl.textContent = S.duration.toFixed(2);
+    // プリセットのハイライト: 2 点だけで、ハンドルが一致するときのみ
+    const cur = S.pts.length === 2
+      ? [S.pts[0].ho[0], S.pts[0].ho[1], 1 + S.pts[1].hi[0], 1 + S.pts[1].hi[1]] : null;
+    chips.forEach(({ b, c }) => b.classList.toggle('active', !!cur && c.every((v, i) => Math.abs(v - cur[i]) < 1e-6)));
+    renderOut();
+    drawGauge();
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
