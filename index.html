@@ -198,7 +198,7 @@ input[type=number]{width:96px;font-variant-numeric:tabular-nums}
 <script id="core">
 const LANGS = [
   ['json', 'JSON'], ['js', 'JavaScript'], ['swift', 'Swift'], ['csharp', 'C# (Unity)'],
-  ['cpp', 'C++'], ['python', 'Python'], ['csv', 'CSV']
+  ['cpp', 'C++'], ['python', 'Python'], ['csv', 'CSV'], ['ai', 'AI向け（説明文＋秒数）']
 ];
 
 // cubic-bezier(x1, y1, x2, y2)
@@ -417,6 +417,55 @@ const lines = (...a) => a.flat().join('\n');
 const SEG_DOC = 'x0, y0, x1, y1, x2, y2, x3, y3';
 
 const GEN = {
+  // AI（ChatGPT / Claude など）に貼り付けて実装を頼むための説明文。時刻はすべて秒でも併記する
+  ai(x) {
+    const d = x.d, n = x.pts.length;
+    const sec = r => fmt(r * d, Math.max(x.g, 3));
+    const pct = v => fmt(v * 100, Math.max(x.g - 2, 1));
+    const out = [
+      '# ゲージ イージング仕様',
+      '',
+      '## 動作',
+      `- ゲージは 0% から始まり、進み始めてから ${x.dur} 秒で 100% に到達する。到達後は 100% のまま。`,
+      `- ゲージ値 = ease(経過秒数 ÷ ${x.dur})。ease は下の曲線で決まる「時間比（0〜1）→ ゲージ値（0〜1）」の関数。`,
+      '',
+      '## 曲線',
+      `- 横軸は時間比 x（0〜1）で、経過秒数 = x × ${x.dur}。縦軸はゲージ値 y（0〜1、1 = 100%）。`
+    ];
+    if (x.mode === 'bezier') {
+      out.push(
+        `- ${n} 個のアンカーを ${n - 1} 個の 3 次ベジェ区間でつなぐ。始点は 0 秒で 0%、終点は ${x.dur} 秒で 100%。`,
+        '',
+        '### アンカー（時刻は秒、ゲージは %）',
+        '| # | 時刻（秒） | ゲージ（%） | 手前ハンドル 秒 / % | 先ハンドル 秒 / % |',
+        '|---|---|---|---|---|'
+      );
+      x.pts.forEach((p, i) => {
+        const hi = i === 0 ? '-' : `${sec(p.x + p.hi[0])} / ${pct(p.y + p.hi[1])}`;
+        const ho = i === n - 1 ? '-' : `${sec(p.x + p.ho[0])} / ${pct(p.y + p.ho[1])}`;
+        out.push(`| ${i + 1} | ${sec(p.x)} | ${pct(p.y)} | ${hi} | ${ho} |`);
+      });
+      out.push('', '### 確認用チェックポイント（実装の検算に使う）', '| 経過（秒） | ゲージ（%） |', '|---|---|');
+      for (let k = 0; k <= 10; k++) out.push(`| ${sec(k / 10)} | ${pct(curveEase(k / 10, x.segs))} |`);
+    } else {
+      out.push(
+        `- 等間隔 ${x.n} 点のサンプル表。i 番目（0 始まり）の時刻 = i ÷ ${x.n - 1} × ${x.dur} 秒。サンプルの間は線形補間で求める。`,
+        '',
+        '### サンプル表',
+        '| i | 時刻（秒） | ゲージ（%） |',
+        '|---|---|---|'
+      );
+      x.raw.forEach((v, i) => out.push(`| ${i} | ${sec(i / (x.n - 1))} | ${pct(v)} |`));
+    }
+    out.push('', '## 参考実装（JavaScript）', '```js', GEN.js(x), '```', '', '## 実装メモ',
+      `- 経過秒数は 0〜${x.dur} にクランプしてから ${x.dur} で割り、ease に渡す。`,
+      '- ゲージ値は 0〜1。表示用の % は 100 倍する。');
+    if (x.mode === 'bezier') {
+      out.push('- 各区間は [x0,y0, x1,y1, x2,y2, x3,y3]（P0〜P3）の 3 次ベジェ。x から y を得るには、区間内で x(t) = x となる t を二分探索で求め、y(t) を返す（参考実装のとおり）。');
+    }
+    return out.join('\n');
+  },
+
   json(x) {
     if (x.mode === 'bezier') {
       return lines('{', `  "duration": ${x.dur},`, '  "segments": [', wrapRows(x.segRows(), '    [', ']'), '  ]', '}');
@@ -746,7 +795,7 @@ function buildOutput(o) {
     : '';
   const raw = mode === 'lut' ? sampleLut(segs, n) : null;
   const x = {
-    mode, d, n, raw, segs, dur, num,
+    mode, d, n, raw, segs, dur, num, pts, g,
     head: mode === 'lut'
       ? `Gauge easing: ${dur}s to reach 100%, ${n}-point lookup table (t = i / ${n - 1})${css}`
       : `Gauge easing: ${dur}s to reach 100%, ${segs.length} bezier segment${segs.length > 1 ? 's' : ''}${css}`,
@@ -1164,7 +1213,10 @@ function buildOutput(o) {
     $('samplesWrap').hidden = S.mode !== 'lut';
     langSel.value = S.lang; samplesSel.value = S.samples; digitsSel.value = S.digits;
     const data = S.lang === 'csv' || S.lang === 'json';
-    $('note').textContent = S.mode === 'bezier'
+    out.style.whiteSpace = S.lang === 'ai' ? 'pre-wrap' : 'pre';
+    $('note').textContent = S.lang === 'ai'
+      ? 'AI にそのまま貼り付けて実装を頼めます（秒数・検算表・参考実装つき）。'
+      : S.mode === 'bezier'
       ? (data ? 'セグメントごとに 3 次ベジェの [x0,y0, x1,y1, x2,y2, x3,y3]（x=時間比, y=ゲージ, どちらも 0〜1）。'
               : 'x = 経過時間 ÷ 秒数（0〜1）を渡すとゲージ値（0〜1）が返ります。')
       : (data ? '等間隔の時間サンプル（t = i / (点数 − 1)）。値は 0〜1。'
